@@ -1,0 +1,23 @@
+CREATE TABLE departamento (
+    id BIGSERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL UNIQUE
+);
+
+CREATE TABLE cargo (
+    id BIGSERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    departamento_id BIGINT NOT NULL
+);
+
+CREATE TABLE funcionario (
+    id BIGSERIAL PRIMARY KEY,
+    nome VARCHAR(150) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    telefone VARCHAR(20),
+    salario NUMERIC(12, 2),
+    cidade VARCHAR(100),
+    status VARCHAR(30) NOT NULL DEFAULT 'EM_ANALISE',
+    cargo_id BIGINT NOT NULL,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

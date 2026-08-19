@@ -1,0 +1,2 @@
+-- A criação opcional é feita por migrate.py quando DB_CREATE_IF_MISSING=true.
+-- Em PostgreSQL gerenciado (como Aiven), mantenha essa opção desativada.
