@@ -1,0 +1,78 @@
+-- Metadados fictícios: nenhum arquivo, segredo ou URL pública é armazenado aqui.
+INSERT INTO arquivo_funcionario (
+    funcionario_id,
+    nome_arquivo,
+    categoria,
+    mime_type,
+    extensao,
+    tamanho_bytes,
+    bucket,
+    storage_path
+)
+SELECT
+    funcionario.id,
+    arquivo.nome_arquivo,
+    arquivo.categoria,
+    arquivo.mime_type,
+    arquivo.extensao,
+    arquivo.tamanho_bytes,
+    'hiringsys-files',
+    arquivo.storage_path
+FROM (
+    VALUES
+        (
+            'lucas.ferreira@email.com',
+            'curriculo-lucas-ferreira.pdf',
+            'CURRICULO',
+            'application/pdf',
+            'pdf',
+            245760::BIGINT,
+            'funcionarios/lucas-ferreira/curriculos/00000000-0000-0000-0000-000000000001.pdf'
+        ),
+        (
+            'mariana.souza@email.com',
+            'foto-mariana-souza.jpg',
+            'FOTO',
+            'image/jpeg',
+            'jpg',
+            98304::BIGINT,
+            'funcionarios/mariana-souza/fotos/00000000-0000-0000-0000-000000000002.jpg'
+        ),
+        (
+            'gabriel.santos@email.com',
+            'certificado-gabriel-santos.pdf',
+            'CERTIFICADO',
+            'application/pdf',
+            'pdf',
+            327680::BIGINT,
+            'funcionarios/gabriel-santos/certificados/00000000-0000-0000-0000-000000000003.pdf'
+        ),
+        (
+            'beatriz.oliveira@email.com',
+            'documento-beatriz-oliveira.png',
+            'DOCUMENTO',
+            'image/png',
+            'png',
+            184320::BIGINT,
+            'funcionarios/beatriz-oliveira/documentos/00000000-0000-0000-0000-000000000004.png'
+        ),
+        (
+            'rafael.lima@email.com',
+            'portfolio-rafael-lima.docx',
+            'OUTRO',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'docx',
+            512000::BIGINT,
+            'funcionarios/rafael-lima/outros/00000000-0000-0000-0000-000000000005.docx'
+        )
+) AS arquivo (
+    email,
+    nome_arquivo,
+    categoria,
+    mime_type,
+    extensao,
+    tamanho_bytes,
+    storage_path
+)
+JOIN funcionario ON funcionario.email = arquivo.email
+ON CONFLICT (bucket, storage_path) DO NOTHING;
