@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import os
 import sys
+import time
 from pathlib import Path
 
 import psycopg
@@ -85,6 +86,45 @@ def reset_database() -> None:
         print(f"Reset concluído: {len(tables)} tabela(s) removida(s).")
 
 
+def apply_migration_with_retry(
+    name: str,
+    contents: str,
+    checksum: str,
+    max_attempts: int,
+) -> None:
+    """Aplica uma migração e retoma com segurança se a conexão cair."""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            # Cada arquivo usa uma conexão curta. A consulta anterior à
+            # transação cobre também a queda depois de um COMMIT bem-sucedido.
+            with psycopg.connect(**connection_kwargs(), autocommit=True) as conn:
+                current = conn.execute(
+                    "SELECT checksum FROM schema_migrations WHERE filename = %s",
+                    (name,),
+                ).fetchone()
+                if current:
+                    if current[0] != checksum:
+                        raise RuntimeError(f"Migração já aplicada foi alterada: {name}")
+                    return
+
+                with conn.transaction():
+                    conn.execute(contents)
+                    conn.execute(
+                        "INSERT INTO schema_migrations (filename, checksum) VALUES (%s, %s)",
+                        (name, checksum),
+                    )
+                return
+        except psycopg.OperationalError:
+            if attempt == max_attempts:
+                raise
+            wait_seconds = min(2 ** (attempt - 1), 5)
+            print(
+                f"[repetindo] {name}: conexão interrompida; "
+                f"nova tentativa em {wait_seconds}s ({attempt + 1}/{max_attempts})"
+            )
+            time.sleep(wait_seconds)
+
+
 def migrate(dry_run: bool = False) -> None:
     create_database_if_requested()
     with psycopg.connect(**connection_kwargs()) as conn:
@@ -94,24 +134,31 @@ def migrate(dry_run: bool = False) -> None:
         conn.commit()
         applied = dict(conn.execute("SELECT filename, checksum FROM schema_migrations").fetchall())
         conn.commit()
-        for path in migration_files():
-            name = path.relative_to(ROOT).as_posix()
-            contents = path.read_text(encoding="utf-8-sig")
-            checksum = hashlib.sha256(contents.encode()).hexdigest()
-            if name in applied:
-                if applied[name] != checksum:
-                    raise RuntimeError(f"Migração já aplicada foi alterada: {name}")
-                print(f"[ok]       {name}")
-                continue
-            if dry_run:
-                print(f"[pendente] {name}")
-                continue
-            print(f"[aplicando] {name}")
-            with conn.transaction():
-                conn.execute(contents)
-                conn.execute("INSERT INTO schema_migrations (filename, checksum) VALUES (%s, %s)",
-                             (name, checksum))
-        print("Migrações verificadas." if dry_run else "Banco atualizado com sucesso.")
+
+    try:
+        max_attempts = int(os.getenv("DB_MIGRATION_RETRIES", "3"))
+    except ValueError as exc:
+        raise ValueError("DB_MIGRATION_RETRIES deve ser um número inteiro") from exc
+    if max_attempts < 1:
+        raise ValueError("DB_MIGRATION_RETRIES deve ser maior que zero")
+
+    for path in migration_files():
+        name = path.relative_to(ROOT).as_posix()
+        contents = path.read_text(encoding="utf-8-sig")
+        checksum = hashlib.sha256(contents.encode()).hexdigest()
+        if name in applied:
+            if applied[name] != checksum:
+                raise RuntimeError(f"Migração já aplicada foi alterada: {name}")
+            print(f"[ok]       {name}")
+            continue
+        if dry_run:
+            print(f"[pendente] {name}")
+            continue
+        print(f"[aplicando] {name}")
+        apply_migration_with_retry(name, contents, checksum, max_attempts)
+        applied[name] = checksum
+
+    print("Migrações verificadas." if dry_run else "Banco atualizado com sucesso.")
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Aplica migrações do HiringSys")
