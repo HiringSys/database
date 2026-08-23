@@ -15,7 +15,9 @@ Copy-Item .env.example .env
 ```
 
 Preencha o `.env`. No Aiven, use `DB_SSLMODE=require` e deixe
-`DB_CREATE_IF_MISSING=false`. Depois execute:
+`DB_CREATE_IF_MISSING=false`. O executor tenta novamente cada arquivo até três
+vezes quando a conexão é interrompida; esse total pode ser alterado com
+`DB_MIGRATION_RETRIES`. Depois execute:
 
 ```powershell
 python migrate.py --dry-run
