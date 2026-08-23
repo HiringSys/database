@@ -1,8 +1,11 @@
 # Banco de dados do HiringSys
 
-Os scripts são aplicados na ordem declarada em `migrate.py`, cada um em uma
-transação. A tabela `schema_migrations` registra arquivo e checksum, impedindo
-reexecução acidental ou alteração de migrações já aplicadas.
+Os scripts são aplicados por diretório (`create`, `dataload`, `functions`,
+`procedures`, `triggers`, `views` e `indexes`) e, dentro de cada diretório, em
+ordem alfabética. Use prefixos `01_`, `02_`, etc. para declarar dependências.
+Cada arquivo roda em uma transação. A tabela `schema_migrations` registra o
+arquivo e o checksum, impedindo reexecução acidental ou alteração de migrações
+já aplicadas.
 
 ```powershell
 python -m venv .venv
@@ -19,5 +22,13 @@ python migrate.py --dry-run
 python migrate.py
 ```
 
-Para evoluções futuras, crie outro SQL e adicione-o ao fim de `MIGRATIONS`.
-Não edite um arquivo que já tenha sido aplicado em algum ambiente.
+Para apagar todas as tabelas e dados do schema `public` e recriar o banco com
+as migrações atuais, use o comando destrutivo:
+
+```powershell
+python migrate.py --reset --yes
+```
+
+Para evoluções futuras, crie outro SQL no diretório da etapa correspondente,
+com um prefixo posterior aos arquivos dos quais ele depende. Não edite um
+arquivo que já tenha sido aplicado em algum ambiente.

@@ -12,15 +12,25 @@ from dotenv import load_dotenv
 from psycopg import sql
 
 ROOT = Path(__file__).resolve().parent
-MIGRATIONS = (
-    "create/02_create_tables.sql", "create/03_create_constraints.sql",
-    "dataload/01_departamentos.sql", "dataload/02_cargos.sql",
-    "dataload/03_funcionarios.sql", "functions/fn_buscar_funcionarios.sql",
-    "procedures/sp_atualizar_status_funcionario.sql",
-    "triggers/trg_atualizar_data_modificacao.sql",
-    "triggers/trg_historico_status.sql", "views/vw_funcionarios_completos.sql",
-    "views/vw_indicadores_status.sql", "indexes/indexes_funcionario.sql",
+
+# A ordem dos diretórios representa as dependências entre as migrações.
+# Dentro de cada diretório, use prefixos 01_, 02_, ... para definir a ordem.
+MIGRATION_DIRECTORIES = (
+    "create",
+    "dataload",
+    "functions",
+    "procedures",
+    "triggers",
+    "views",
+    "indexes",
 )
+
+
+def migration_files() -> tuple[Path, ...]:
+    migrations: list[Path] = []
+    for directory in MIGRATION_DIRECTORIES:
+        migrations.extend(sorted((ROOT / directory).glob("*.sql")))
+    return tuple(migrations)
 
 def env_bool(name: str) -> bool:
     return os.getenv(name, "false").strip().lower() in {"1", "true", "yes", "sim"}
@@ -52,6 +62,29 @@ def create_database_if_requested() -> None:
             conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(target)))
             print(f"Banco {target!r} criado.")
 
+
+def reset_database() -> None:
+    """Remove todas as tabelas do schema public e os objetos dependentes."""
+    create_database_if_requested()
+    with psycopg.connect(**connection_kwargs()) as conn:
+        tables = conn.execute(
+            """
+            SELECT tablename
+            FROM pg_tables
+            WHERE schemaname = 'public'
+            ORDER BY tablename
+            """
+        ).fetchall()
+        with conn.transaction():
+            for (table,) in tables:
+                conn.execute(
+                    sql.SQL("DROP TABLE {} CASCADE").format(
+                        sql.Identifier("public", table)
+                    )
+                )
+        print(f"Reset concluído: {len(tables)} tabela(s) removida(s).")
+
+
 def migrate(dry_run: bool = False) -> None:
     create_database_if_requested()
     with psycopg.connect(**connection_kwargs()) as conn:
@@ -61,10 +94,8 @@ def migrate(dry_run: bool = False) -> None:
         conn.commit()
         applied = dict(conn.execute("SELECT filename, checksum FROM schema_migrations").fetchall())
         conn.commit()
-        for name in MIGRATIONS:
-            path = ROOT / name
-            if not path.is_file():
-                raise FileNotFoundError(f"Migração não encontrada: {path}")
+        for path in migration_files():
+            name = path.relative_to(ROOT).as_posix()
             contents = path.read_text(encoding="utf-8-sig")
             checksum = hashlib.sha256(contents.encode()).hexdigest()
             if name in applied:
@@ -85,9 +116,25 @@ def migrate(dry_run: bool = False) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Aplica migrações do HiringSys")
     parser.add_argument("--dry-run", action="store_true", help="lista pendências sem executar SQL")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="remove todas as tabelas do schema public antes de migrar",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="confirma a exclusão destrutiva solicitada por --reset",
+    )
     args = parser.parse_args()
     load_dotenv(ROOT / ".env")
     try:
+        if args.reset and args.dry_run:
+            raise ValueError("--reset e --dry-run não podem ser usados juntos")
+        if args.reset and not args.yes:
+            raise ValueError("use --reset --yes para confirmar a exclusão de todas as tabelas")
+        if args.reset:
+            reset_database()
         migrate(args.dry_run)
     except (OSError, ValueError, RuntimeError, psycopg.Error) as exc:
         print(f"Erro: {exc}", file=sys.stderr)
