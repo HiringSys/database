@@ -25,6 +25,9 @@ ALTER TABLE funcionario
     ADD CONSTRAINT uk_funcionario_email UNIQUE (email),
     ADD CONSTRAINT ck_funcionario_experiencia CHECK (
         experiencia IN ('SEM_EXPERIENCIA', 'ESTAGIARIO', 'JUNIOR', 'PLENO', 'SENIOR')
+    ),
+    ADD CONSTRAINT ck_funcionario_status CHECK (
+        status IN ('EM_ANALISE', 'APROVADO', 'REPROVADO', 'CONTRATADO')
     );
 
 -- Cargo e funcionario podem vir da versão anterior do esquema.
